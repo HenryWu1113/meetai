@@ -19,8 +19,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertTitle } from "@/components/ui/alert";
 import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
