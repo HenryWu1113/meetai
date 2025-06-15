@@ -1,29 +1,39 @@
-import { db } from "@/db";
-import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
-import { agents } from "@/db/schema";
-import { agentsInsertSchema } from "../schemas";
-import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
+import { db } from '@/db'
+import { createTRPCRouter, protectedProcedure } from '@/trpc/init'
+import { agents } from '@/db/schema'
+import { agentsInsertSchema } from '../schemas'
+import { z } from 'zod'
+import { and, count, desc, eq, getTableColumns, ilike, sql } from 'drizzle-orm'
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  MIN_PAGE_SIZE,
-} from "@/constants";
+  MIN_PAGE_SIZE
+} from '@/constants'
+import { TRPCError } from '@trpc/server'
 
 export const agentsRouter = createTRPCRouter({
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
-    .query(async ({ input }) => {
-      const [data] = await db
+    .query(async ({ input, ctx }) => {
+      const [existingAgent] = await db
         .select({
           meetingCount: sql<number>`5`,
-          ...getTableColumns(agents),
+          ...getTableColumns(agents)
         })
         .from(agents)
-        .where(eq(agents.id, input.id));
+        .where(
+          and(eq(agents.id, input.id), eq(agents.userId, ctx.auth.user.id))
+        )
 
-      return data;
+      if (!existingAgent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found'
+        })
+      }
+
+      return existingAgent
     }),
   getMany: protectedProcedure
     .input(
@@ -34,17 +44,17 @@ export const agentsRouter = createTRPCRouter({
           .min(MIN_PAGE_SIZE)
           .max(MAX_PAGE_SIZE)
           .default(DEFAULT_PAGE_SIZE),
-        search: z.string().nullish(),
+        search: z.string().nullish()
       })
     )
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search } = input;
+      const { page, pageSize, search } = input
 
       const data = await db
         .select({
           // 計算每個 agent 的 meetingCount(跟資料表格式無關)
           meetingCount: sql<number>`5`,
-          ...getTableColumns(agents),
+          ...getTableColumns(agents)
         })
         .from(agents)
         .where(
@@ -59,16 +69,16 @@ export const agentsRouter = createTRPCRouter({
         .orderBy(desc(agents.createdAt), desc(agents.id))
         .limit(pageSize)
         // OFFSET 是用來跳過前面幾筆資料，這樣就可以分頁
-        .offset((page - 1) * pageSize);
+        .offset((page - 1) * pageSize)
 
       const [total] = await db
         .select({ count: count() })
         .from(agents)
-        .where(eq(agents.userId, ctx.auth.user.id));
+        .where(eq(agents.userId, ctx.auth.user.id))
 
-      const totalPages = Math.ceil(total.count / pageSize);
+      const totalPages = Math.ceil(total.count / pageSize)
 
-      return { items: data, total: total.count, totalPages };
+      return { items: data, total: total.count, totalPages }
     }),
   create: protectedProcedure
     // 使用 createAgentSchema 來驗證 input
@@ -80,11 +90,11 @@ export const agentsRouter = createTRPCRouter({
         // 把 input 的資料存入 agents 資料表
         .values({
           ...input,
-          userId: ctx.auth.user.id,
+          userId: ctx.auth.user.id
         })
         // 回傳存入的資料
-        .returning();
+        .returning()
 
-      return createdAgent;
-    }),
-});
+      return createdAgent
+    })
+})
