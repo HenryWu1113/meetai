@@ -1,16 +1,17 @@
-import { db } from "@/db";
-import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
-import { meetings, agents } from "@/db/schema";
-import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
+import { db } from '@/db'
+import { createTRPCRouter, protectedProcedure } from '@/trpc/init'
+import { meetings, agents } from '@/db/schema'
+import { z } from 'zod'
+import { and, count, desc, eq, getTableColumns, ilike, sql } from 'drizzle-orm'
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  MIN_PAGE_SIZE,
-} from "@/constants";
-import { TRPCError } from "@trpc/server";
-import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
+  MIN_PAGE_SIZE
+} from '@/constants'
+import { TRPCError } from '@trpc/server'
+import { meetingsInsertSchema, meetingsUpdateSchema } from '../schemas'
+import { MeetingStatus } from '../types'
 
 export const meetingsRouter = createTRPCRouter({
   update: protectedProcedure
@@ -22,16 +23,16 @@ export const meetingsRouter = createTRPCRouter({
         .where(
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
         )
-        .returning();
+        .returning()
 
       if (!updatedMeeting) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Meeting not found",
-        });
+          code: 'NOT_FOUND',
+          message: 'Meeting not found'
+        })
       }
 
-      return updatedMeeting;
+      return updatedMeeting
     }),
   create: protectedProcedure
     // 使用 createMeetingsSchema 來驗證 input
@@ -43,35 +44,35 @@ export const meetingsRouter = createTRPCRouter({
         // 把 input 的資料存入 meetings 資料表
         .values({
           ...input,
-          userId: ctx.auth.user.id,
+          userId: ctx.auth.user.id
         })
         // 回傳存入的資料
-        .returning();
+        .returning()
 
       // TODO: Create Stream Call, Upsert Stream Users
 
-      return createdMeeting;
+      return createdMeeting
     }),
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
       const [existingMeeting] = await db
         .select({
-          ...getTableColumns(meetings),
+          ...getTableColumns(meetings)
         })
         .from(meetings)
         .where(
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
-        );
+        )
 
       if (!existingMeeting) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Meeting not found",
-        });
+          code: 'NOT_FOUND',
+          message: 'Meeting not found'
+        })
       }
 
-      return existingMeeting;
+      return existingMeeting
     }),
   getMany: protectedProcedure
     .input(
@@ -83,18 +84,28 @@ export const meetingsRouter = createTRPCRouter({
           .max(MAX_PAGE_SIZE)
           .default(DEFAULT_PAGE_SIZE),
         search: z.string().nullish(),
+        agentId: z.string().nullish(),
+        status: z
+          .enum([
+            MeetingStatus.Upcoming,
+            MeetingStatus.Active,
+            MeetingStatus.Completed,
+            MeetingStatus.Processing,
+            MeetingStatus.Cancelled
+          ])
+          .nullish()
       })
     )
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search } = input;
+      const { page, pageSize, search, agentId, status } = input
 
       const data = await db
         .select({
           ...getTableColumns(meetings),
           agent: agents,
           duration: sql<number>`EXTRACT(EPOCH FROM (ended_at- started_at))`.as(
-            "duration"
-          ),
+            'duration'
+          )
         })
         .from(meetings)
         // 不同 JOIN 類型的差別：
@@ -114,22 +125,31 @@ export const meetingsRouter = createTRPCRouter({
             // % 是模糊搜尋，代表任意長度的任意字元（可為 0 個或多個字元）
             // _ 是單一個字元
             // ilike 是 postgres 特有語法，忽略大小寫
-            search ? ilike(meetings.name, `%${search}%`) : undefined
+            search ? ilike(meetings.name, `%${search}%`) : undefined,
+            status ? eq(meetings.status, status) : undefined,
+            agentId ? eq(meetings.agentId, agentId) : undefined
           )
         )
         .orderBy(desc(meetings.createdAt), desc(meetings.id))
         .limit(pageSize)
         // OFFSET 是用來跳過前面幾筆資料，這樣就可以分頁
-        .offset((page - 1) * pageSize);
+        .offset((page - 1) * pageSize)
 
       const [total] = await db
         .select({ count: count() })
         .from(meetings)
         .innerJoin(agents, eq(meetings.agentId, agents.id))
-        .where(eq(meetings.userId, ctx.auth.user.id));
+        .where(
+          and(
+            eq(meetings.userId, ctx.auth.user.id),
+            search ? ilike(meetings.name, `%${search}%`) : undefined,
+            status ? eq(meetings.status, status) : undefined,
+            agentId ? eq(meetings.agentId, agentId) : undefined
+          )
+        )
 
-      const totalPages = Math.ceil(total.count / pageSize);
+      const totalPages = Math.ceil(total.count / pageSize)
 
-      return { items: data, total: total.count, totalPages };
-    }),
-});
+      return { items: data, total: total.count, totalPages }
+    })
+})
