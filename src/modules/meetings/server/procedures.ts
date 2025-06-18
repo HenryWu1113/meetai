@@ -1,8 +1,8 @@
 import { db } from "@/db";
 import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
-import { meetings } from "@/db/schema";
+import { meetings, agents } from "@/db/schema";
 import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
@@ -91,8 +91,23 @@ export const meetingsRouter = createTRPCRouter({
       const data = await db
         .select({
           ...getTableColumns(meetings),
+          agent: agents,
+          duration: sql<number>`EXTRACT(EPOCH FROM (ended_at- started_at))`.as(
+            "duration"
+          ),
         })
         .from(meetings)
+        // 不同 JOIN 類型的差別：
+        // INNER JOIN（內部連接）：
+        // 只回傳兩個表都有匹配資料的記錄
+        // 如果某個 meeting 的 agentId 在 agents 表中找不到，這個 meeting 就不會出現在結果中
+        // LEFT JOIN（左連接）：
+        // 回傳左表（meetings）的所有記錄
+        // 如果右表（agents）沒有匹配資料，agent 欄位會是 null
+        // RIGHT JOIN（右連接）：
+        // 回傳右表（agents）的所有記錄
+        // 如果左表（meetings）沒有匹配資料，meeting 欄位會是 null
+        .innerJoin(agents, eq(meetings.agentId, agents.id))
         .where(
           and(
             eq(meetings.userId, ctx.auth.user.id),
@@ -110,6 +125,7 @@ export const meetingsRouter = createTRPCRouter({
       const [total] = await db
         .select({ count: count() })
         .from(meetings)
+        .innerJoin(agents, eq(meetings.agentId, agents.id))
         .where(eq(meetings.userId, ctx.auth.user.id));
 
       const totalPages = Math.ceil(total.count / pageSize);
