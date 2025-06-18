@@ -1,29 +1,29 @@
-import { ReactNode, useState } from "react";
-import { ChevronsUpDownIcon } from "lucide-react";
+import { ReactNode, useState } from 'react'
+import { ChevronsUpDownIcon } from 'lucide-react'
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 
 import {
   CommandEmpty,
   CommandInput,
   CommandItem,
   CommandList,
-  CommandResponsiveDialog,
-} from "@/components/ui/command";
+  CommandResponsiveDialog
+} from '@/components/ui/command'
 
 interface Props {
   options: Array<{
-    id: string;
-    value: string;
-    children: ReactNode;
-  }>;
-  onSelect: (value: string) => void;
-  onSearch?: (value: string) => void;
-  value: string;
-  placeholder?: string;
-  isSearchable?: boolean;
-  className?: string;
+    id: string
+    value: string
+    children: ReactNode
+  }>
+  onSelect: (value: string) => void
+  onSearch?: (value: string) => void
+  value: string
+  placeholder?: string
+  isSearchable?: boolean
+  className?: string
 }
 
 export const CommandSelect = ({
@@ -32,36 +32,42 @@ export const CommandSelect = ({
   onSearch,
   value,
   placeholder,
-  className,
+  className
 }: Props) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false)
 
-  const selectedOption = options.find((option) => option.value === value);
+  const selectedOption = options.find((option) => option.value === value)
+
+  const handleOpenChange = (open: boolean) => {
+    console.log('open', open)
+    onSearch?.('')
+    setOpen(open)
+  }
 
   return (
     <>
       <Button
-        type="button"
-        variant="outline"
+        type='button'
+        variant='outline'
         className={cn(
-          "h-9 font-normal px-2 justify-between",
-          !selectedOption && "text-muted-foreground",
+          'h-9 font-normal px-2 justify-between',
+          !selectedOption && 'text-muted-foreground',
           className
         )}
         onClick={() => setOpen(true)}
       >
         {selectedOption?.children ?? placeholder}
-        <ChevronsUpDownIcon className="size-4" />
+        <ChevronsUpDownIcon className='size-4' />
       </Button>
       <CommandResponsiveDialog
         shouldFilter={!onSearch}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={handleOpenChange}
       >
-        <CommandInput placeholder="Search..." onValueChange={onSearch} />
+        <CommandInput placeholder='Search...' onValueChange={onSearch} />
         <CommandList>
           <CommandEmpty>
-            <span className="text-sm text-muted-foreground">
+            <span className='text-sm text-muted-foreground'>
               No options found
             </span>
           </CommandEmpty>
@@ -70,8 +76,8 @@ export const CommandSelect = ({
               key={option.id}
               value={option.value}
               onSelect={() => {
-                onSelect(option.value);
-                setOpen(false);
+                onSelect(option.value)
+                setOpen(false)
               }}
             >
               {option.children}
@@ -80,5 +86,5 @@ export const CommandSelect = ({
         </CommandList>
       </CommandResponsiveDialog>
     </>
-  );
-};
+  )
+}
