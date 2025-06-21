@@ -1,19 +1,45 @@
-import { db } from "@/db";
-import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
-import { meetings, agents } from "@/db/schema";
-import { z } from "zod";
-import { and, count, desc, eq, getTableColumns, ilike, sql } from "drizzle-orm";
+import { db } from '@/db'
+import { createTRPCRouter, protectedProcedure } from '@/trpc/init'
+import { meetings, agents } from '@/db/schema'
+import { z } from 'zod'
+import { and, count, desc, eq, getTableColumns, ilike, sql } from 'drizzle-orm'
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  MIN_PAGE_SIZE,
-} from "@/constants";
-import { TRPCError } from "@trpc/server";
-import { meetingsInsertSchema, meetingsUpdateSchema } from "../schemas";
-import { MeetingStatus } from "../types";
+  MIN_PAGE_SIZE
+} from '@/constants'
+import { TRPCError } from '@trpc/server'
+import { meetingsInsertSchema, meetingsUpdateSchema } from '../schemas'
+import { MeetingStatus } from '../types'
+import { generateAvatarUri } from '@/lib/avatar'
+import { streamVideo } from '@/lib/stream-video'
 
 export const meetingsRouter = createTRPCRouter({
+  generateToken: protectedProcedure.mutation(async ({ ctx }) => {
+    await streamVideo.upsertUsers([
+      {
+        id: ctx.auth.user.id,
+        name: ctx.auth.user.name,
+        role: 'admin',
+        image: generateAvatarUri({
+          seed: ctx.auth.user.id,
+          variant: 'botttsNeutral'
+        })
+      }
+    ])
+
+    const expirationTime = Math.floor(Date.now() / 1000) + 3600
+    const issuedAt = Math.floor(Date.now() / 1000) - 60
+
+    const token = streamVideo.generateUserToken({
+      user_id: ctx.auth.user.id,
+      exp: expirationTime,
+      validity_in_seconds: issuedAt
+    })
+
+    return token
+  }),
   remove: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
@@ -22,16 +48,16 @@ export const meetingsRouter = createTRPCRouter({
         .where(
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
         )
-        .returning();
+        .returning()
 
       if (!removedMeeting) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Meeting not found",
-        });
+          code: 'NOT_FOUND',
+          message: 'Meeting not found'
+        })
       }
 
-      return removedMeeting;
+      return removedMeeting
     }),
   update: protectedProcedure
     .input(meetingsUpdateSchema)
@@ -42,16 +68,16 @@ export const meetingsRouter = createTRPCRouter({
         .where(
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
         )
-        .returning();
+        .returning()
 
       if (!updatedMeeting) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Meeting not found",
-        });
+          code: 'NOT_FOUND',
+          message: 'Meeting not found'
+        })
       }
 
-      return updatedMeeting;
+      return updatedMeeting
     }),
   create: protectedProcedure
     // 使用 createMeetingsSchema 來驗證 input
@@ -63,14 +89,59 @@ export const meetingsRouter = createTRPCRouter({
         // 把 input 的資料存入 meetings 資料表
         .values({
           ...input,
-          userId: ctx.auth.user.id,
+          userId: ctx.auth.user.id
         })
         // 回傳存入的資料
-        .returning();
+        .returning()
 
       // TODO: Create Stream Call, Upsert Stream Users
+      const call = streamVideo.video.call('default', createdMeeting.id)
 
-      return createdMeeting;
+      await call.create({
+        data: {
+          created_by_id: ctx.auth.user.id,
+          custom: {
+            meetingId: createdMeeting.id,
+            meetingName: createdMeeting.name
+          },
+          settings_override: {
+            transcription: {
+              language: 'zh',
+              mode: 'auto-on',
+              closed_caption_mode: 'auto-on'
+            },
+            recording: {
+              mode: 'auto-on',
+              quality: '1080p'
+            }
+          }
+        }
+      })
+
+      const [existingAgent] = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.id, createdMeeting.agentId))
+
+      if (!existingAgent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found'
+        })
+      }
+
+      await streamVideo.upsertUsers([
+        {
+          id: existingAgent.id,
+          name: existingAgent.name,
+          image: generateAvatarUri({
+            seed: existingAgent.name,
+            variant: 'botttsNeutral'
+          })
+        }
+      ])
+
+      return createdMeeting
     }),
   getOne: protectedProcedure
     .input(z.object({ id: z.string() }))
@@ -80,23 +151,23 @@ export const meetingsRouter = createTRPCRouter({
           ...getTableColumns(meetings),
           agent: agents,
           duration: sql<number>`EXTRACT(EPOCH FROM (ended_at- started_at))`.as(
-            "duration"
-          ),
+            'duration'
+          )
         })
         .from(meetings)
         .innerJoin(agents, eq(meetings.agentId, agents.id))
         .where(
           and(eq(meetings.id, input.id), eq(meetings.userId, ctx.auth.user.id))
-        );
+        )
 
       if (!existingMeeting) {
         throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Meeting not found",
-        });
+          code: 'NOT_FOUND',
+          message: 'Meeting not found'
+        })
       }
 
-      return existingMeeting;
+      return existingMeeting
     }),
   getMany: protectedProcedure
     .input(
@@ -115,21 +186,21 @@ export const meetingsRouter = createTRPCRouter({
             MeetingStatus.Active,
             MeetingStatus.Completed,
             MeetingStatus.Processing,
-            MeetingStatus.Cancelled,
+            MeetingStatus.Cancelled
           ])
-          .nullish(),
+          .nullish()
       })
     )
     .query(async ({ ctx, input }) => {
-      const { page, pageSize, search, agentId, status } = input;
+      const { page, pageSize, search, agentId, status } = input
 
       const data = await db
         .select({
           ...getTableColumns(meetings),
           agent: agents,
           duration: sql<number>`EXTRACT(EPOCH FROM (ended_at- started_at))`.as(
-            "duration"
-          ),
+            'duration'
+          )
         })
         .from(meetings)
         // 不同 JOIN 類型的差別：
@@ -157,7 +228,7 @@ export const meetingsRouter = createTRPCRouter({
         .orderBy(desc(meetings.createdAt), desc(meetings.id))
         .limit(pageSize)
         // OFFSET 是用來跳過前面幾筆資料，這樣就可以分頁
-        .offset((page - 1) * pageSize);
+        .offset((page - 1) * pageSize)
 
       const [total] = await db
         .select({ count: count() })
@@ -170,10 +241,10 @@ export const meetingsRouter = createTRPCRouter({
             status ? eq(meetings.status, status) : undefined,
             agentId ? eq(meetings.agentId, agentId) : undefined
           )
-        );
+        )
 
-      const totalPages = Math.ceil(total.count / pageSize);
+      const totalPages = Math.ceil(total.count / pageSize)
 
-      return { items: data, total: total.count, totalPages };
-    }),
-});
+      return { items: data, total: total.count, totalPages }
+    })
+})
