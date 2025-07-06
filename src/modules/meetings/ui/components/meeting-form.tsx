@@ -1,16 +1,16 @@
-import { MeetingGetOne } from "@/modules/meetings/types";
-import { meetingsInsertSchema } from "../../schemas";
-import { useQueryClient, useMutation, useQuery } from "@tanstack/react-query";
-import { useTRPC } from "@/trpc/client";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { toast } from "sonner";
+import { MeetingGetOne } from '@/modules/meetings/types'
+import { meetingsInsertSchema } from '../../schemas'
+import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query'
+import { useTRPC } from '@/trpc/client'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { toast } from 'sonner'
 
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { CommandSelect } from "@/components/command-select";
-import { GeneratedAvatar } from "@/components/generated-avatar";
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { CommandSelect } from '@/components/command-select'
+import { GeneratedAvatar } from '@/components/generated-avatar'
 
 import {
   Form,
@@ -19,35 +19,36 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { useState } from "react";
-import { NewAgentDialog } from "@/modules/agents/ui/components/new-agent-dialog";
+  FormMessage
+} from '@/components/ui/form'
+import { useState } from 'react'
+import { NewAgentDialog } from '@/modules/agents/ui/components/new-agent-dialog'
+import { useRouter } from 'next/navigation'
 
 interface MeetingFormProps {
-  onSuccess?: (id?: string) => void;
-  onCancel?: () => void;
-  initialValues?: MeetingGetOne;
+  onSuccess?: (id?: string) => void
+  onCancel?: () => void
+  initialValues?: MeetingGetOne
 }
 
 export const MeetingForm = ({
   onSuccess,
   onCancel,
-  initialValues,
+  initialValues
 }: MeetingFormProps) => {
-  const trpc = useTRPC();
-  // const router = useRouter()
-  const queryClient = useQueryClient();
+  const trpc = useTRPC()
+  const router = useRouter()
+  const queryClient = useQueryClient()
 
-  const [openNewAgentDialog, setOpenNewAgentDialog] = useState(false);
-  const [agentSearch, setAgentSearch] = useState("");
+  const [openNewAgentDialog, setOpenNewAgentDialog] = useState(false)
+  const [agentSearch, setAgentSearch] = useState('')
 
   const agents = useQuery(
     trpc.agents.getMany.queryOptions({
       pageSize: 100,
-      search: agentSearch,
+      search: agentSearch
     })
-  );
+  )
 
   // 使用 useMutation 來創造 mutation 物件
   // 使用 trpc.agents.create.mutationOptions 來創造 mutation 物件
@@ -60,19 +61,22 @@ export const MeetingForm = ({
         // 清除 getMany 的 cache，這樣就可以重新取得最新的資料
         await queryClient.invalidateQueries(
           trpc.meetings.getMany.queryOptions({})
-        );
+        )
 
-        // TODO: Invalidate free tier usage
+        await queryClient.invalidateQueries(
+          trpc.premium.getFreeUsage.queryOptions()
+        )
 
-        onSuccess?.(data.id);
+        onSuccess?.(data.id)
       },
       onError: (error) => {
-        toast.error(error.message);
-
-        // TODO: 確認 error 的 type 是否為 FORBIDDEN，如果是的話，則跳轉到 /upgrade
-      },
+        toast.error(error.message)
+        if (error.data?.code === 'FORBIDDEN') {
+          router.push('/upgrade')
+        }
+      }
     })
-  );
+  )
 
   const updateMeeting = useMutation(
     trpc.meetings.update.mutationOptions({
@@ -81,46 +85,44 @@ export const MeetingForm = ({
         // 清除 getMany 的 cache，這樣就可以重新取得最新的資料
         await queryClient.invalidateQueries(
           trpc.meetings.getMany.queryOptions({})
-        );
+        )
 
         // 清除 getOne 的 cache
         if (initialValues?.id) {
           await queryClient.invalidateQueries(
             trpc.meetings.getOne.queryOptions({ id: initialValues.id })
-          );
+          )
         }
 
-        onSuccess?.();
+        onSuccess?.()
       },
       onError: (error) => {
-        toast.error(error.message);
-
-        // TODO: 確認 error 的 type 是否為 FORBIDDEN，如果是的話，則跳轉到 /upgrade
-      },
+        toast.error(error.message)
+      }
     })
-  );
+  )
 
   const form = useForm<z.infer<typeof meetingsInsertSchema>>({
     resolver: zodResolver(meetingsInsertSchema),
     defaultValues: {
-      name: initialValues?.name ?? "",
-      agentId: initialValues?.agentId ?? "",
-    },
-  });
+      name: initialValues?.name ?? '',
+      agentId: initialValues?.agentId ?? ''
+    }
+  })
 
-  const isEdit = !!initialValues?.id;
-  const isPending = createMeeting.isPending || updateMeeting.isPending;
+  const isEdit = !!initialValues?.id
+  const isPending = createMeeting.isPending || updateMeeting.isPending
 
   const onSubmit = (values: z.infer<typeof meetingsInsertSchema>) => {
     if (isEdit) {
       updateMeeting.mutate({
         ...values,
-        id: initialValues.id,
-      });
+        id: initialValues.id
+      })
     } else {
-      createMeeting.mutate(values);
+      createMeeting.mutate(values)
     }
-  };
+  }
 
   return (
     <>
@@ -129,15 +131,15 @@ export const MeetingForm = ({
         onOpenChange={setOpenNewAgentDialog}
       />
       <Form {...form}>
-        <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
+        <form className='space-y-4' onSubmit={form.handleSubmit(onSubmit)}>
           <FormField
             control={form.control}
-            name="name"
+            name='name'
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g. Math consultations" {...field} />
+                  <Input placeholder='e.g. Math consultations' {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -145,7 +147,7 @@ export const MeetingForm = ({
           />
           <FormField
             control={form.control}
-            name="agentId"
+            name='agentId'
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Agent</FormLabel>
@@ -155,27 +157,27 @@ export const MeetingForm = ({
                       id: agent.id,
                       value: agent.id,
                       children: (
-                        <div className="flex items-center gap-x-2">
+                        <div className='flex items-center gap-x-2'>
                           <GeneratedAvatar
                             seed={agent.name}
-                            variant="botttsNeutral"
-                            className="border size-6"
+                            variant='botttsNeutral'
+                            className='border size-6'
                           />
                           <span>{agent.name}</span>
                         </div>
-                      ),
+                      )
                     }))}
                     onSelect={field.onChange}
                     onSearch={setAgentSearch}
                     value={field.value}
-                    placeholder="Select an agent"
+                    placeholder='Select an agent'
                   />
                 </FormControl>
                 <FormDescription>
-                  Not found what you&apos;re looking for?{" "}
+                  Not found what you&apos;re looking for?{' '}
                   <button
-                    type="button"
-                    className="text-primary hover:underline"
+                    type='button'
+                    className='text-primary hover:underline'
                     onClick={() => setOpenNewAgentDialog(true)}
                   >
                     Create new agent
@@ -185,23 +187,23 @@ export const MeetingForm = ({
               </FormItem>
             )}
           />
-          <div className="flex items-center gap-x-2 justify-between">
+          <div className='flex items-center gap-x-2 justify-between'>
             {onCancel && (
               <Button
-                variant="ghost"
+                variant='ghost'
                 disabled={isPending}
-                type="button"
+                type='button'
                 onClick={onCancel}
               >
                 Cancel
               </Button>
             )}
-            <Button type="submit" disabled={isPending}>
-              {isEdit ? "Update" : "Create"}
+            <Button type='submit' disabled={isPending}>
+              {isEdit ? 'Update' : 'Create'}
             </Button>
           </div>
         </form>
       </Form>
     </>
-  );
-};
+  )
+}

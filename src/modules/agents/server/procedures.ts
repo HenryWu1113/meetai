@@ -1,5 +1,9 @@
 import { db } from '@/db'
-import { createTRPCRouter, protectedProcedure } from '@/trpc/init'
+import {
+  createTRPCRouter,
+  premiumProcedure,
+  protectedProcedure
+} from '@/trpc/init'
 import { agents } from '@/db/schema'
 import { agentsInsertSchema, agentsUpdateSchema } from '../schemas'
 import { z } from 'zod'
@@ -119,7 +123,7 @@ export const agentsRouter = createTRPCRouter({
 
       return { items: data, total: total.count, totalPages }
     }),
-  create: protectedProcedure
+  create: premiumProcedure('agents')
     // 使用 createAgentSchema 來驗證 input
     .input(agentsInsertSchema)
     .mutation(async ({ input, ctx }) => {

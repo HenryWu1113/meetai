@@ -34,7 +34,7 @@ export const AgentForm = ({
   initialValues
 }: AgentFormProps) => {
   const trpc = useTRPC()
-  // const router = useRouter()
+  const router = useRouter()
   const queryClient = useQueryClient()
 
   // 使用 useMutation 來創造 mutation 物件
@@ -50,14 +50,17 @@ export const AgentForm = ({
           trpc.agents.getMany.queryOptions({})
         )
 
-        // TODO: Invalidate free tier usage
+        await queryClient.invalidateQueries(
+          trpc.premium.getFreeUsage.queryOptions()
+        )
 
         onSuccess?.()
       },
       onError: (error) => {
         toast.error(error.message)
-
-        // TODO: 確認 error 的 type 是否為 FORBIDDEN，如果是的話，則跳轉到 /upgrade
+        if (error.data?.code === 'FORBIDDEN') {
+          router.push('/upgrade')
+        }
       }
     })
   )
@@ -82,8 +85,6 @@ export const AgentForm = ({
       },
       onError: (error) => {
         toast.error(error.message)
-
-        // TODO: 確認 error 的 type 是否為 FORBIDDEN，如果是的話，則跳轉到 /upgrade
       }
     })
   )
