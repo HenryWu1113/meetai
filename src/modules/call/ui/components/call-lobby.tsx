@@ -7,7 +7,6 @@ import { generateAvatarUri } from '@/lib/avatar'
 import {
   DefaultVideoPlaceholder,
   StreamVideoParticipant,
-  StreamVideoProvider,
   ToggleAudioPreviewButton,
   ToggleVideoPreviewButton,
   useCallStateHooks,

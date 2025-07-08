@@ -4,10 +4,10 @@ import {
   premiumProcedure,
   protectedProcedure
 } from '@/trpc/init'
-import { agents } from '@/db/schema'
+import { agents, meetings } from '@/db/schema'
 import { agentsInsertSchema, agentsUpdateSchema } from '../schemas'
 import { z } from 'zod'
-import { and, count, desc, eq, getTableColumns, ilike, sql } from 'drizzle-orm'
+import { and, count, desc, eq, getTableColumns, ilike } from 'drizzle-orm'
 import {
   DEFAULT_PAGE,
   DEFAULT_PAGE_SIZE,
@@ -61,8 +61,8 @@ export const agentsRouter = createTRPCRouter({
     .query(async ({ input, ctx }) => {
       const [existingAgent] = await db
         .select({
-          meetingCount: sql<number>`5`,
-          ...getTableColumns(agents)
+          ...getTableColumns(agents),
+          meetingCount: db.$count(meetings, eq(meetings.agentId, agents.id))
         })
         .from(agents)
         .where(
@@ -96,8 +96,8 @@ export const agentsRouter = createTRPCRouter({
       const data = await db
         .select({
           // 計算每個 agent 的 meetingCount(跟資料表格式無關)
-          meetingCount: sql<number>`5`,
-          ...getTableColumns(agents)
+          ...getTableColumns(agents),
+          meetingCount: db.$count(meetings, eq(meetings.agentId, agents.id))
         })
         .from(agents)
         .where(
