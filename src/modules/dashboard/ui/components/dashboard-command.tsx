@@ -63,7 +63,7 @@ export const DashboardCommand = ({ open, setOpen }: Props) => {
         <CommandGroup heading='Agents'>
           <CommandEmpty>
             <span className='text-muted-foreground text-sm'>
-              No meetings found
+              No Agents found
             </span>
           </CommandEmpty>
           {agents.data?.items.map((agent) => (
